@@ -58,6 +58,8 @@ Obstaculo bolaDeDemolicao = {-1, -1, -1, 0}; // Uma bola na posição 5,5,5
 struct Individuo {
     vector<double> genes;
     double fitness;
+    int passoVitoria;
+    bool venceu;
     
     // Construtor padrão
     Individuo() {}
@@ -122,6 +124,7 @@ vector<double> poseInicial = {0.0, 90.0, 0.0};
 
 double calcularFitness(Individuo& ind, Ponto alvo) {
     double penalidadeTotal = 0.0;
+    double bonusObjetivo = 0.0;
     
     // Vetor para guardar a trajetória completa (Inicio -> P1 -> P2 -> ... -> Fim)
     vector<vector<double>> trajetoria;
@@ -136,6 +139,8 @@ double calcularFitness(Individuo& ind, Ponto alvo) {
         trajetoria.push_back(pose);
     }
 
+    double distMinGlobal = 1e9;
+
     // 2. Avaliar a Trajetória
     for (size_t i = 1; i < trajetoria.size(); i++) {
         vector<double>& poseAnt = trajetoria[i-1];
@@ -144,28 +149,38 @@ double calcularFitness(Individuo& ind, Ponto alvo) {
         // A. Calcular posição cartesiana desta pose
         Ponto p = cinematicaDireta(poseAtual);
 
+        double dist = sqrt(pow(p.x - alvo.x, 2) + pow(p.y - alvo.y, 2) + pow(p.z - alvo.z, 2));
+
+        if (dist < distMinGlobal) distMinGlobal = dist;
+
+        if (dist < 1.0) {
+            ind.venceu = true;
+            ind.passoVitoria = (int)i;
+
+            bonusObjetivo = 50000.0 + (c.nWaypoints - i) * 100.0;
+            break;
+        }
+
+        penalidadeTotal += dist * 1.0;
+
         // B. Checar Colisão (Penalidade Brutal)
         if (verificarColisao(p)) {
-            penalidadeTotal += 1000.0; 
+            penalidadeTotal += 2000.0; 
         }
+
 
         // C. Penalizar movimento excessivo (Eficiência)
         // Soma a diferença angular de cada junta
         double movimento = 0;
         for(int k=0; k<3; k++) movimento += abs(poseAtual[k] - poseAnt[k]);
-        penalidadeTotal += movimento * 0.1; // Peso leve
+        penalidadeTotal += movimento * 0.5; // Peso leve
     }
 
-    // 3. Avaliar se chegou no alvo (Última pose)
-    Ponto pFinal = cinematicaDireta(trajetoria.back());
-    double distAlvo = sqrt(pow(pFinal.x - alvo.x, 2) + 
-                                pow(pFinal.y - alvo.y, 2) + 
-                                pow(pFinal.z - alvo.z, 2));
-    
-    penalidadeTotal += distAlvo * 10.0; // Peso alto para chegar no alvo
-
-    // O Fitness continua sendo negativo da penalidade (queremos maximizar, ou seja, penalidade zero)
-    ind.fitness = -penalidadeTotal;
+    if (ind.venceu) {
+        ind.fitness = bonusObjetivo - penalidadeTotal;
+    } else {
+        ind.fitness = -penalidadeTotal - (distMinGlobal * 100.0);
+    }
     return ind.fitness;
 }
 
