@@ -16,7 +16,7 @@ struct Config {
     int nIndv = 100;           // Tamanho da população          
     int nMortosCat = 30;       // Indivíduos mortos na catástrofe
     double pCat = 0.05;        // Probabilidade de catástrofe (5%)
-    int nWaypoints = 5;     // Número de pontos de passagem 
+    int nWaypoints = 100;      // Número de pontos de passagem 
     int nJuntas = 3;
     int nGenes = nWaypoints * nJuntas;
     
