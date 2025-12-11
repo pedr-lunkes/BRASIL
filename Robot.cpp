@@ -1,10 +1,10 @@
 #include "Robot.h"
 #include "Config.h"
 #include <cmath>
+#include <iostream>
 
 using namespace std;
 
-// Definição do obstáculo
 Obstaculo bolaDeDemolicao = {-1, -1, -1, 0}; 
 vector<double> poseInicial = {0.0, 90.0, 0.0};
 
@@ -38,52 +38,63 @@ bool verificarColisao(Ponto p) {
     return dist < bolaDeDemolicao.raio;
 }
 
+vector<double> move(vector<double> p1, vector<double> v) {
+    vector<double> np(p1.size());
+    for (int i = 0; i < v.size(); i++) {
+        np[i] = p1[i] + v[i];
+
+        if (np[i] < c.baseLmin[i]) np[i] = c.baseLmin[i];
+        if (np[i] > c.baseLmax[i]) np[i] = c.baseLmax[i];
+    }
+    return np;
+}
+
 double calcularFitness(Individuo& ind, Ponto alvo) {
     double penalidadeTotal = 0.0;
     double bonusObjetivo = 0.0;
     
     vector<vector<double>> trajetoria;
+    vector<Ponto> trajetoriaPontiforme;
     trajetoria.push_back(poseInicial);
+    trajetoriaPontiforme.push_back(cinematicaDireta(poseInicial));
 
-    for (int i = 0; i < c.nWaypoints; i++) {
-        vector<double> pose = ind.genoma[i];
-        trajetoria.push_back(pose);
-    }
-
-    double distMinGlobal = 1e9;
+    double distFinal = 0;
     ind.venceu = false;
 
-    for (size_t i = 1; i < trajetoria.size(); i++) {
-        vector<double>& poseAnt = trajetoria[i-1];
-        vector<double>& poseAtual = trajetoria[i];
+    for (int i = 1; i < c.nWaypoints; i++) {
+        vector<double> poseAnt = trajetoria[i-1];
+        vector<double> poseAtual = move(poseAnt, ind.genoma[i]);
+        trajetoria.push_back(poseAtual);
 
         Ponto p = cinematicaDireta(poseAtual);
+        trajetoriaPontiforme.push_back(p);
         double dist = sqrt(pow(p.x - alvo.x, 2) + pow(p.y - alvo.y, 2) + pow(p.z - alvo.z, 2));
 
-        if (dist < distMinGlobal) distMinGlobal = dist;
-
-        if (dist < 1.0) {
+        if (dist < 0.2) {
             ind.venceu = true;
             ind.passoVitoria = (int)i;
-            bonusObjetivo = 50000.0 + (c.nWaypoints - i) * 100.0;
+            bonusObjetivo = 1000.0 + (c.nWaypoints - i) * 500.0;
             break;
         }
 
-        penalidadeTotal += dist * 1.0;
+        penalidadeTotal += dist * 1.5;
+        distFinal = dist;
 
         if (verificarColisao(p)) {
             penalidadeTotal += 2000.0; 
         }
 
         double movimento = 0;
-        for(int k=0; k<3; k++) movimento += abs(poseAtual[k] - poseAnt[k]);
-        penalidadeTotal += movimento * 0.5;
+        for(int k=0; k<c.nJuntas; k++) movimento += abs(poseAtual[k] - poseAnt[k]);
+        penalidadeTotal += movimento * 0.1;
     }
+
+    ind.trajetoria = trajetoriaPontiforme;
 
     if (ind.venceu) {
         ind.fitness = bonusObjetivo - penalidadeTotal;
     } else {
-        ind.fitness = -penalidadeTotal - (distMinGlobal * 100.0);
+        ind.fitness = -penalidadeTotal - distFinal * 2000;
     }
     return ind.fitness;
 }

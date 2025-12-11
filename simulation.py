@@ -3,291 +3,322 @@ from pygame.locals import *
 from OpenGL.GL import *
 from OpenGL.GLU import *
 import numpy as np
-import math
-from collections import deque
+import subprocess
+import sys
+import threading
+import queue
+import random
+import multiprocessing
 
-# --- Configurações Físicas do Robô ---
-LINK_1 = 2.0
-LINK_2 = 2.1
+# --- Configurações Físicas ---
+LINK_1 = 10.0
+LINK_2 = 10.0
 
+# --- Variáveis Globais de Estado da UI ---
+current_steps_count = 0
 
-# --- Classe Câmera ---
-class Camera:
+# --- Filas de Comunicação ---
+trajectory_queue = queue.Queue()
+command_queue = queue.Queue()
+graph_data_queue = multiprocessing.Queue() 
+
+# --- Processo de Plotagem (Matplotlib) ---
+def graph_process_func(data_q):
+    import matplotlib.pyplot as plt
+    import matplotlib.animation as animation
+    
+    def handle_close(evt):
+        sys.exit(0)
+
+    fig, ax = plt.subplots()
+    fig.canvas.mpl_connect('close_event', handle_close)
+    fig.canvas.manager.set_window_title('Evolução do Fitness')
+    
+    line_best, = ax.plot([], [], 'g-', label='Melhor Fitness')
+    line_avg, = ax.plot([], [], 'b--', label='Fitness Médio', alpha=0.6)
+    
+    ax.set_xlabel('Gerações'); ax.set_ylabel('Fitness'); ax.legend(); ax.grid(True)
+    gens, bests, avgs = [], [], []
+
+    def update(frame):
+        updated = False
+        while not data_q.empty():
+            try:
+                msg = data_q.get_nowait()
+                if msg == "RESET":
+                    gens.clear(); bests.clear(); avgs.clear()
+                    ax.set_xlim(0, 100); ax.set_ylim(-1000, 1000)
+                else:
+                    g, b, a = msg
+                    gens.append(g); bests.append(b); avgs.append(a); updated = True
+            except: pass
+        
+        if updated:
+            line_best.set_data(gens, bests); line_avg.set_data(gens, avgs)
+            if gens:
+                ax.set_xlim(0, max(gens) * 1.1)
+                all_vals = bests + avgs
+                min_y = min(all_vals); max_y = max(all_vals)
+                margin = (max_y - min_y) * 0.1 if max_y != min_y else 10
+                ax.set_ylim(min_y - margin, max_y + margin)
+        return line_best, line_avg
+
+    ani = animation.FuncAnimation(fig, update, interval=200, blit=False)
+    plt.show()
+
+# --- Classe Thread Solver (C++) ---
+class SolverThread(threading.Thread):
     def __init__(self):
-        self.yaw = 45.0  
-        self.pitch = 30.0 
-        self.distance = 12.0
-        self.sensitivity = 0.5
-        self.zoom_speed = 0.5
+        super().__init__()
+        self.daemon = True
+        self.process = None
+        self.running = True
 
-    def handle_input(self, event):
-        if event.type == pygame.MOUSEMOTION:
-            if pygame.mouse.get_pressed()[0]:
-                dx, dy = event.rel
-                self.yaw -= dx * self.sensitivity
-                self.pitch += dy * self.sensitivity
-                # Limita para não virar de ponta cabeça
-                self.pitch = max(min(self.pitch, 89.0), -10.0)
-        
-        if event.type == pygame.MOUSEWHEEL:
-            self.distance -= event.y * self.zoom_speed
-            if self.distance < 2.0: self.distance = 2.0
+    def run(self):
+        global current_steps_count
+        while self.running:
+            try: target = command_queue.get(timeout=0.5) 
+            except queue.Empty: continue
 
-    def apply(self):
-        glMatrixMode(GL_MODELVIEW)
-        glLoadIdentity()
-        
-        # Z é altura, XY é plano horizontal
-        rad_yaw = math.radians(self.yaw)
-        rad_pitch = math.radians(self.pitch)
-        
-        cam_x = self.distance * math.cos(rad_pitch) * math.cos(rad_yaw)
-        cam_y = self.distance * math.cos(rad_pitch) * math.sin(rad_yaw)
-        cam_z = self.distance * math.sin(rad_pitch)
-        
-        gluLookAt(cam_x, cam_y, cam_z, 0, 0, 0, 0, 0, 1)
+            if self.process and self.process.poll() is None:
+                self.process.kill(); self.process.wait()
+            
+            graph_data_queue.put("RESET")
+            tx, ty, tz = target
+            
+            process_name = "./main" if sys.platform != "win32" else "main.exe"
+            try:
+                self.process = subprocess.Popen([process_name, str(tx), str(ty), str(tz)], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1)
+                current_path = []; reading_path = False
+                
+                while True:
+                    if not command_queue.empty(): break 
+                    line = self.process.stdout.readline()
+                    if not line: break
+                    line = line.strip()
+                    
+                    if line == "START_PATH": current_path = []; reading_path = True
+                    elif line == "END_PATH":
+                        reading_path = False
+                        if current_path: trajectory_queue.put(current_path)
+                    elif line.startswith("STATS"):
+                        parts = line.split()
+                        if len(parts) == 5:
+                            current_steps_count = int(parts[4])
+                            graph_data_queue.put((int(parts[1]), float(parts[2]), float(parts[3])))
+                    elif reading_path:
+                        try: current_path.append(tuple(map(float, line.split())))
+                        except ValueError: pass
+            except FileNotFoundError: print("ERRO: Executável C++ não encontrado.")
 
+# --- Funções Auxiliares ---
+def generate_valid_target_fk():
+    """ Gera alvo válido via Cinemática Direta """
+    angle_base = random.uniform(-np.pi, np.pi)
+    angle_shoulder = random.uniform(0, np.pi/2)     
+    angle_elbow = random.uniform(0, np.pi)   
 
-# --- Matemática do Robô ---
-def calculate_ik(target_x, target_y, target_z):
-    # Base (livre 360°)
-    theta_base = math.atan2(target_y, target_x)
-    r_ground = math.sqrt(target_x**2 + target_y**2)
+    angle_abs = angle_shoulder - angle_elbow
+    r1 = LINK_1 * np.cos(angle_shoulder)
+    z1 = LINK_1 * np.sin(angle_shoulder)
     
-    # Não deixa o braço ir para de baixo do plano XY
-    z_height = max(target_z, 0.0) 
-
-    dist_sq = r_ground**2 + z_height**2
-    dist = math.sqrt(dist_sq)
-
-    # Restrição Física: Alcance Máximo do Braço
-    if dist > (LINK_1 + LINK_2):
-        dist = LINK_1 + LINK_2
-        dist_sq = dist**2
-
-    try:
-        alpha = math.atan2(z_height, r_ground)
-        
-        # Ombro (Cálculo do ângulo interno)
-        cos_shoulder = (LINK_1**2 + dist_sq - LINK_2**2) / (2 * LINK_1 * dist)
-        theta_shoulder_internal = math.acos(cos_shoulder)
-        
-        # Ângulo bruto do ombro
-        raw_theta_shoulder = alpha + theta_shoulder_internal
-
-        # Cotovelo (Cálculo do ângulo interno)
-        cos_elbow = (LINK_1**2 + LINK_2**2 - dist_sq) / (2 * LINK_1 * LINK_2)
-        raw_theta_elbow = math.acos(cos_elbow) - math.pi 
-
-        # --- Restrições ---
-        # RESTRIÇÃO DO OMBRO: 0 a 90 graus (0 a PI/2 radianos)
-        theta_shoulder = max(0.0, min(raw_theta_shoulder, math.pi / 2))
-
-        # RESTRIÇÃO DO COTOVELO: 180 graus de liberdade
-        theta_elbow = max(-math.pi, min(raw_theta_elbow, 0.0))
-
-        return theta_base, theta_shoulder, theta_elbow
-    except ValueError:
-        return 0, 0, 0
-
-def calculate_fk(base_rad, shoulder_rad, elbow_rad):
-    """
-    Cinemática Direta: Ângulos -> (x,y,z) real
-    """
-    # Projeção no plano vertical (formado pelo braço)
-    # L1
-    r1 = LINK_1 * math.cos(shoulder_rad)
-    z1 = LINK_1 * math.sin(shoulder_rad)
+    r2 = LINK_2 * np.cos(angle_abs)
+    z2 = LINK_2 * np.sin(angle_abs)
     
-    # L2 (soma o ângulo pois o cotovelo é relativo ao ombro)
-    angle_sum = shoulder_rad + elbow_rad
-    r2 = LINK_2 * math.cos(angle_sum)
-    z2 = LINK_2 * math.sin(angle_sum)
-    
-    # Coordenadas totais (r = raio horizontal, z = altura)
     r_total = r1 + r2
     z_total = z1 + z2
-    
-    # Converte polar (r, base_angle) para cartesiano (x, y)
-    x = r_total * math.cos(base_rad)
-    y = r_total * math.sin(base_rad)
-    
-    return (x, y, z_total)
 
-
-# --- Desenho ---
-def draw_grid_z_up():
-    """ Desenha um grid no chão (z=0) """
-    glLineWidth(1.0)
-    glColor3f(0.25, 0.25, 0.25)
+    # Converete para coordenadas polares
+    x = r_total * np.cos(angle_base)
+    y = r_total * np.sin(angle_base)
+    z = z_total
     
-    glBegin(GL_LINES)
-    step = 10
-    # Linhas paralelas ao eixo X
-    for y in range(-step, step + 1):
-        glVertex3f(-step, y, 0)
-        glVertex3f(step, y, 0)
-    # Linhas paralelas ao eixo Y
-    for x in range(-step, step + 1):
-        glVertex3f(x, -step, 0)
-        glVertex3f(x, step, 0)
-    glEnd()
+    return (x, y, z)
 
-    # Eixos RGB (X=R, Y=G, Z=B)
-    glLineWidth(3.0)
-    glBegin(GL_LINES)
-    glColor3f(1, 0, 0); glVertex3f(0,0,0); glVertex3f(3,0,0) # X
-    glColor3f(0, 1, 0); glVertex3f(0,0,0); glVertex3f(0,3,0) # Y
-    glColor3f(0, 0, 1); glVertex3f(0,0,0); glVertex3f(0,0,3) # Z (Cima)
+def draw_text_gl(x, y, text, font, color=(255, 255, 255)):
+    text_surf = font.render(text, True, color)
+    text_data = pygame.image.tostring(text_surf, "RGBA", False)
+    w, h = text_surf.get_width(), text_surf.get_height()
+    glEnable(GL_TEXTURE_2D); tex_id = glGenTextures(1); glBindTexture(GL_TEXTURE_2D, tex_id)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR); glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, text_data)
+    glDisable(GL_DEPTH_TEST); glDisable(GL_LIGHTING); glColor4f(1, 1, 1, 1)
+    glMatrixMode(GL_PROJECTION); glPushMatrix(); glLoadIdentity(); glOrtho(0, 800, 600, 0, -1, 1)
+    glMatrixMode(GL_MODELVIEW); glPushMatrix(); glLoadIdentity(); glTranslatef(x, y, 0)
+    glBegin(GL_QUADS); glTexCoord2f(0,0); glVertex2f(0,0); glTexCoord2f(1,0); glVertex2f(w,0); glTexCoord2f(1,1); glVertex2f(w,h); glTexCoord2f(0,1); glVertex2f(0,h); glEnd()
+    glPopMatrix(); glMatrixMode(GL_PROJECTION); glPopMatrix(); glMatrixMode(GL_MODELVIEW)
+    glDeleteTextures([tex_id]); glDisable(GL_TEXTURE_2D); glEnable(GL_DEPTH_TEST)
+
+def draw_button_gl(x, y, w, h, text, font, text_color=(255,255,255)):
+    surf = pygame.Surface((w, h)); surf.fill((50, 50, 150)) 
+    pygame.draw.rect(surf, (200, 200, 200), (0, 0, w, h), 2) 
+    text_surf = font.render(text, True, text_color)
+    text_rect = text_surf.get_rect(center=(w/2, h/2))
+    surf.blit(text_surf, text_rect)
+    text_data = pygame.image.tostring(surf, "RGBA", False)
+    glEnable(GL_TEXTURE_2D); tex_id = glGenTextures(1); glBindTexture(GL_TEXTURE_2D, tex_id)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR); glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, text_data)
+    glDisable(GL_DEPTH_TEST); glDisable(GL_LIGHTING); glColor4f(1,1,1,1)
+    glMatrixMode(GL_PROJECTION); glPushMatrix(); glLoadIdentity(); glOrtho(0, 800, 600, 0, -1, 1)
+    glMatrixMode(GL_MODELVIEW); glPushMatrix(); glLoadIdentity(); glTranslatef(x, y, 0)
+    glBegin(GL_QUADS); glTexCoord2f(0,0); glVertex2f(0,0); glTexCoord2f(1,0); glVertex2f(w,0); glTexCoord2f(1,1); glVertex2f(w,h); glTexCoord2f(0,1); glVertex2f(0,h); glEnd()
+    glPopMatrix(); glMatrixMode(GL_PROJECTION); glPopMatrix(); glMatrixMode(GL_MODELVIEW)
+    glDeleteTextures([tex_id]); glDisable(GL_TEXTURE_2D); glEnable(GL_DEPTH_TEST)
+
+# --- Câmera e IK ---
+class Camera:
+    def __init__(self):
+        self.yaw = 45.0; self.pitch = 30.0; self.distance = 45.0
+        self.sensitivity = 0.5; self.zoom_speed = 2.0
+    def handle_input(self, event):
+        if event.type == pygame.MOUSEMOTION and pygame.mouse.get_pressed()[0]:
+            dx, dy = event.rel; self.yaw -= dx * self.sensitivity; self.pitch = max(min(self.pitch + dy * self.sensitivity, 89.0), -89.0)
+        if event.type == pygame.MOUSEWHEEL: self.distance = max(5.0, self.distance - event.y * self.zoom_speed)
+    def apply(self):
+        glMatrixMode(GL_MODELVIEW); glLoadIdentity()
+        rad_yaw, rad_pitch = np.radians(self.yaw), np.radians(self.pitch)
+        gluLookAt(self.distance*np.cos(rad_pitch)*np.cos(rad_yaw), self.distance*np.cos(rad_pitch)*np.sin(rad_yaw), self.distance*np.sin(rad_pitch), 0,0,0, 0,0,1)
+
+def calculate_ik(target_x, target_y, target_z):
+    theta_base = np.atan2(target_y, target_x)
+    r_ground = np.sqrt(target_x**2 + target_y**2); dist_sq = r_ground**2 + target_z**2; dist = np.sqrt(dist_sq)
+    if dist > (LINK_1 + LINK_2 - 0.001): dist = LINK_1 + LINK_2 - 0.001; dist_sq = dist**2 
+    try:
+        alpha = np.atan2(target_z, r_ground)
+        cos_sh = (LINK_1**2 + dist_sq - LINK_2**2) / (2 * LINK_1 * dist); cos_sh = max(min(cos_sh, 1.0), -1.0)
+        theta_sh = alpha + np.acos(cos_sh)
+        cos_el = (LINK_1**2 + LINK_2**2 - dist_sq) / (2 * LINK_1 * LINK_2); cos_el = max(min(cos_el, 1.0), -1.0)
+        theta_el = np.acos(cos_el) - np.pi 
+        return theta_base, theta_sh, theta_el
+    except: return 0,0,0
+
+def draw_robot(angles, ghost_mode=False):
+    base, shoulder, elbow = angles
+    quadric = gluNewQuadric()
+    if ghost_mode:
+        c_base, c_link1, c_joint1, c_link2, c_tip = (0.8,0.8,0.8,0.3), (0.7,0.7,1.0,0.3), (0.8,0.6,0.6,0.3), (1.0,1.0,0.7,0.3), (0.7,1.0,0.7,0.3)
+        glEnable(GL_CULL_FACE) 
+    else:
+        c_base, c_link1, c_joint1, c_link2, c_tip = (0.7,0.7,0.7,1.0), (0.0,0.4,0.8,1.0), (0.8,0.2,0.2,1.0), (1.0,0.8,0.0,1.0), (0.0,1.0,0.0,1.0)
+        glDisable(GL_CULL_FACE)
+
+    glPushMatrix()
+    glRotatef(np.degrees(base), 0, 0, 1)
+    glColor4f(*c_base); gluSphere(quadric, 0.8, 16, 16)
+    glRotatef(-np.degrees(shoulder), 0, 1, 0)
+    glColor4f(*c_link1); glPushMatrix(); glRotatef(90, 0, 1, 0); gluCylinder(quadric, 0.4, 0.4, LINK_1, 16, 16); glPopMatrix()
+    glTranslatef(LINK_1, 0, 0)
+    glColor4f(*c_joint1); gluSphere(quadric, 0.6, 16, 16)
+    glRotatef(-np.degrees(elbow), 0, 1, 0)
+    glColor4f(*c_link2); glPushMatrix(); glRotatef(90, 0, 1, 0); gluCylinder(quadric, 0.3, 0.3, LINK_2, 16, 16); glPopMatrix()
+    glTranslatef(LINK_2, 0, 0)
+    glColor4f(*c_tip); gluSphere(quadric, 0.3, 16, 16)
+    glPopMatrix()
+    glDisable(GL_CULL_FACE)
+
+def draw_grid():
+    glLineWidth(1.0); glColor3f(0.25, 0.25, 0.25); glBegin(GL_LINES)
+    for i in range(-30, 31, 5): glVertex3f(-30, i, 0); glVertex3f(30, i, 0); glVertex3f(i, -30, 0); glVertex3f(i, 30, 0)
     glEnd()
 
 def draw_trail(points):
     if len(points) < 2: return
-    glDisable(GL_LIGHTING)
-    glLineWidth(2.0)
-    glBegin(GL_LINE_STRIP)
-    for i, p in enumerate(points):
-        # Gradiente do ciano para o azul escuro
-        alpha = i / len(points)
-        glColor4f(0.0, 1.0, 1.0, alpha) 
-        glVertex3f(p[0], p[1], p[2])
+    glDisable(GL_LIGHTING); glLineWidth(2.0); glBegin(GL_LINE_STRIP)
+    for i, p in enumerate(points): glColor4f(0.0, 1.0, 1.0, i/len(points)); glVertex3f(p[0], p[1], p[2])
     glEnd()
-
-def draw_robot(base_rad, shoulder_rad, elbow_rad):
-    quadric = gluNewQuadric()
-    
-    # Ângulos para graus (OpenGL usa graus)
-    base_deg = math.degrees(base_rad)
-    shoulder_deg = math.degrees(shoulder_rad)
-    elbow_deg = math.degrees(elbow_rad)
-
-    # Base (Rotaciona em Z) 
-    glPushMatrix()
-    glRotatef(base_deg, 0, 0, 1) 
-    
-    # Desenha a junta da base
-    glColor3f(0.7, 0.7, 0.7)
-    gluSphere(quadric, 0.4, 16, 16)
-
-    # -- Braço 1 --
-    glRotatef(-shoulder_deg, 0, 1, 0) # Eixo Y local, negativo para levantar
-    
-    # Desenha Braço 1
-    glColor3f(0.0, 0.4, 0.8) # Azulão
-    glPushMatrix()
-    glRotatef(90, 0, 1, 0) # Alinha o cilindro (Z default) com eixo X
-    gluCylinder(quadric, 0.15, 0.15, LINK_1, 16, 16)
-    glPopMatrix()
-    
-    # Move para o cotovelo
-    glTranslatef(LINK_1, 0, 0) # Move em X local
-
-    # -- Braço 2 --
-    glColor3f(0.8, 0.2, 0.2)
-    gluSphere(quadric, 0.25, 16, 16) # Junta Cotovelo
-    
-    glRotatef(-elbow_deg, 0, 1, 0) # Rotação relativa ao ombro
-    
-    glColor3f(1.0, 0.8, 0.0) # Amarelo
-    glPushMatrix()
-    glRotatef(90, 0, 1, 0)
-    gluCylinder(quadric, 0.1, 0.1, LINK_2, 16, 16)
-    glPopMatrix()
-    
-    glTranslatef(LINK_2, 0, 0)
-    
-    # -- Ponta --
-    glColor3f(0.0, 1.0, 0.0) # Verde
-    gluSphere(quadric, 0.12, 16, 16)
-
-    glPopMatrix() # Restaura matriz
-
-# --- Stream de Dados ---
-def data_stream_generator():
-    """
-    Temos que mudar essa função para chamar a função evolutiva
-    """
-    t = 0
-    while True:
-        x = 2 + 1.0 * math.cos(t)
-        y = 2 + 1.0 * math.sin(t)
-        # z = 1.5 + 1.0 * math.sin(t * 3) # Altura varia entre 0.5 e 2.5
-        z = 1.0
-        t += 0.02
-        yield (x, y, z)
 
 # --- Main ---
 def main():
+    # CORREÇÃO AQUI: Declarar variável global dentro da função
+    global current_steps_count
+    
     pygame.init()
     display = (800, 600)
-    
-    # Atributos para suavizar serrilhado
-    pygame.display.gl_set_attribute(pygame.GL_MULTISAMPLEBUFFERS, 1)
-    pygame.display.gl_set_attribute(pygame.GL_MULTISAMPLESAMPLES, 4)
-    
+    pygame.display.gl_set_attribute(pygame.GL_MULTISAMPLEBUFFERS, 1); pygame.display.gl_set_attribute(pygame.GL_MULTISAMPLESAMPLES, 4)
     pygame.display.set_mode(display, DOUBLEBUF | OPENGL)
-    pygame.display.set_caption("Simulador Robô (Z-UP Correto)")
-
-    glMatrixMode(GL_PROJECTION)
-    glLoadIdentity()
-    gluPerspective(45, (display[0]/display[1]), 0.1, 100.0)
+    pygame.display.set_caption("Simulador 3D - Evolução Robótica")
     
-    glMatrixMode(GL_MODELVIEW)
-    glEnable(GL_DEPTH_TEST)
+    font = pygame.font.SysFont('Arial', 16, bold=True)
+    font_info = pygame.font.SysFont('Consolas', 16)
+
+    glMatrixMode(GL_PROJECTION); glLoadIdentity(); gluPerspective(45, (display[0]/display[1]), 0.1, 200.0)
+    glMatrixMode(GL_MODELVIEW); glEnable(GL_DEPTH_TEST); glEnable(GL_BLEND); glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+    glClearColor(0.15, 0.15, 0.18, 1.0)
+
+    camera = Camera(); clock = pygame.time.Clock()
+
+    graph_process = multiprocessing.Process(target=graph_process_func, args=(graph_data_queue,))
+    graph_process.start()
+    solver_thread = SolverThread(); solver_thread.start()
+
+    target_pos = generate_valid_target_fk()
+    command_queue.put(target_pos)
+    trail_points = []
     
-    # Habilita Blend para transparência no rastro
-    glEnable(GL_BLEND)
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+    btn_new_target = pygame.Rect(20, 20, 180, 35)
+    btn_ghost_mode = pygame.Rect(20, 65, 180, 35)
 
-    glClearColor(0.15, 0.15, 0.18, 1.0) # Fundo cinza técnico
-
-    camera = Camera()
-    stream = data_stream_generator()
-    clock = pygame.time.Clock()
-    
-    trail_points = deque(maxlen=200)
-    target_pos = (2.0, 0.0, 2.0)
-
+    show_ghost_mode = False
     running = True
-    while running:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
-            camera.handle_input(event)
 
-        # Pega dados (X, Y, Z) da stream
-        try:
-            target_pos = next(stream)
-        except StopIteration:
-            pass
+    try:
+        while running:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT: running = False
+                
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                    running = False
+                    print("ESC pressionado. Encerrando...")
 
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
-        camera.apply()
-        
-        draw_grid_z_up()
+                camera.handle_input(event)
 
-        # Calcula Cinemática (Matemática pura, sem OpenGL)
-        angles_rad = calculate_ik(*target_pos)
-        
-        # Calcula Posição REAL da ponta (Forward Kinematics) para o rastro
-        tip_pos_world = calculate_fk(*angles_rad)
-        trail_points.append(tip_pos_world)
+                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    mouse_pos = pygame.mouse.get_pos()
+                    
+                    if btn_new_target.collidepoint(mouse_pos):
+                        target_pos = generate_valid_target_fk()
+                        command_queue.put(target_pos)
+                        trail_points = []
+                        current_steps_count = 0
+                    
+                    if btn_ghost_mode.collidepoint(mouse_pos):
+                        show_ghost_mode = not show_ghost_mode
 
-        # Renderiza
-        draw_trail(trail_points)
-        draw_robot(*angles_rad)
+            try:
+                while not trajectory_queue.empty(): trail_points = trajectory_queue.get_nowait()
+            except queue.Empty: pass
 
-        # Desenha o alvo (Fantasma branco)
-        glPushMatrix()
-        glColor4f(1, 1, 1, 0.5)
-        glTranslatef(target_pos[0], target_pos[1], target_pos[2])
-        gluSphere(gluNewQuadric(), 0.08, 8, 8)
-        glPopMatrix()
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+            camera.apply(); draw_grid()
+            
+            glPushMatrix(); glColor4f(1, 1, 1, 0.5); glTranslatef(*target_pos); gluSphere(gluNewQuadric(), 1.0, 16, 16); glPopMatrix()
 
-        pygame.display.flip()
-        clock.tick(60)
+            if show_ghost_mode:
+                ideal_angles = calculate_ik(*target_pos)
+                draw_robot(ideal_angles, ghost_mode=True)
 
-    pygame.quit()
+            if trail_points:
+                draw_trail(trail_points)
+                draw_robot(calculate_ik(*trail_points[-1]), ghost_mode=False)
+
+            draw_button_gl(btn_new_target.x, btn_new_target.y, btn_new_target.w, btn_new_target.h, "NOVO ALVO", font)
+            
+            ghost_text = f"FANTASMA: {'ON' if show_ghost_mode else 'OFF'}"
+            ghost_color = (100, 255, 100) if show_ghost_mode else (255, 100, 100)
+            draw_button_gl(btn_ghost_mode.x, btn_ghost_mode.y, btn_ghost_mode.w, btn_ghost_mode.h, ghost_text, font, ghost_color)
+            
+            draw_text_gl(20, 110, f"Passos: {current_steps_count}", font_info, (0, 255, 255))
+
+            pygame.display.flip(); clock.tick(60)
+
+    finally:
+        print("Limpando processos...")
+        solver_thread.running = False
+        if graph_process.is_alive():
+            graph_process.terminate()
+            graph_process.kill()
+        pygame.quit()
+        print("Encerrado com sucesso.")
 
 if __name__ == "__main__":
     main()

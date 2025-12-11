@@ -6,9 +6,11 @@ int estagAtual = 0;
 double incAtual = 0.0;
 
 void alterarIncrementoDaMutacaoAtual(bool resetar) {
-    if (resetar) incAtual = 0;
+    if (resetar){ 
+        incAtual = 0;
+        estagAtual = 0;
+    }
     else incAtual++;
-    estagAtual = 0;
 }
 
 double escolherNumReal(double min, double max) {

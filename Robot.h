@@ -11,5 +11,6 @@ extern std::vector<double> poseInicial;
 Ponto cinematicaDireta(const std::vector<double>& angulos);
 bool verificarColisao(Ponto p);
 double calcularFitness(Individuo& ind, Ponto alvo);
+vector<double> move(vector<double> p1, vector<double> v);
 
 #endif

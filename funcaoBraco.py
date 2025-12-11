@@ -16,7 +16,7 @@ theta1 = np.random.uniform(-np.pi, np.pi, num_points)
 theta2 = np.random.uniform(0, np.pi/2, num_points) 
 
 # Domínio do Cotovelo: -180 a 0 graus
-theta3 = np.random.uniform(-np.pi, 0, num_points)
+theta3 = np.random.uniform(0, np.pi, num_points)
 
 # --- A Função f(t1, t2, t3) -> (x, y, z) ---
 def forward_kinematics(t1, t2, t3, l1, l2):

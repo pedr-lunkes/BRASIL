@@ -12,6 +12,7 @@ __pycache__/
 *.app
 *.i*86
 *.x86_64 
+*/main
 
 # Distribution / packaging
 .Python

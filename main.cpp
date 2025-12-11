@@ -14,114 +14,104 @@ using namespace std;
 // Variável para armazenar o melhor global
 Individuo melhorGeral;
 
-int main() {
+Ponto gerarAlvoAleatorio() {
+    vector<double> angulosValidos;
+    
+    // Gera um ângulo aleatório para cada junta respeitando os limites do Config.h
+    for (int i = 0; i < c.nJuntas; i++) {
+        double angulo = escolherNumReal(c.baseLmin[i], c.baseLmax[i]);
+        angulosValidos.push_back(angulo);
+    }
 
-    // Atualiza probabilidade de mutação
+    Ponto alvoGerado = cinematicaDireta(angulosValidos);
+
+    return alvoGerado;
+}
+
+// ---- Funções para a comunicação com o script em python ----
+// Função que manda a trajetoria do melhor indivíduo no terminal
+void imprimirTrajetoria() {
+    cout << "START_PATH" << endl;
+    for(int i = 0; i < melhorGeral.trajetoria.size(); i++) {
+        Ponto p = melhorGeral.trajetoria[i];
+        cout << p.x << " " << p.y << " " << p.z << endl;
+    }
+    cout << "END_PATH" << endl;
+    cout.flush();
+}
+
+// Função que manda algumas estatísticas do Algoritmo Evolutivo para plot
+void imprimirEstatisticas(int geracao, double mediaFit) {
+    // Formato: STATS <geracao> <melhor_fit> <media_fit> <tamanho_trajetoria>
+    cout << "STATS " 
+         << geracao << " " 
+         << melhorGeral.fitness << " " 
+         << mediaFit << " " 
+         << melhorGeral.trajetoria.size() << endl;
+}
+
+int main(int argc, char* argv[]) {
+    // Leitura dos argumentos
+    double tx = 20.0, ty = 0.0, tz = 0.0;
+    if (argc >= 4) {
+        tx = atof(argv[1]);
+        ty = atof(argv[2]);
+        tz = atof(argv[3]);
+    }
+
+    Ponto alvo = {tx, ty, tz};
+
+    // Configurações
     c.listaPNumGene.assign(c.nGenes, 1.0/c.nGenes);
     c.listaPCadaGene.assign(c.nGenes, 1.0/c.nGenes);
-    
-    Ponto alvo = {0.0, 0.0, 20.0};
-    
+
+    // Inicialização
     vector<Individuo> pop;
     for(int i=0; i<c.nIndv; i++) pop.push_back(gerarIndividuo());
 
     for(auto& ind : pop) calcularFitness(ind, alvo);
     melhorGeral = pop[0];
 
-    int geracoes = 1;
-
-    cout << "========================================\n";
-    cout << "   EVOLUCAO DE TRAJETORIA ROBOTICA 3D   \n";
-    cout << "========================================\n";
-    cout << "Waypoints (Passos): " << c.nWaypoints << "\n";
-    cout << "Total de Genes    : " << c.nGenes << "\n";
-    cout << "Alvo Desejado     : (" << alvo.x << ", " << alvo.y << ", " << alvo.z << ")\n";
-    cout << "Obstaculo (Bola)  : (" << bolaDeDemolicao.x << ", " << bolaDeDemolicao.y 
-         << ", " << bolaDeDemolicao.z << ") Raio: " << bolaDeDemolicao.raio << "\n";
-    cout << "----------------------------------------\n\n";
-
-    while (geracoes) {
-
+    int geracoes = 0;
+    
+    // Loop Infinito: O programa roda até o Python matar o processo
+    while (true) {
         int idxMelhorLocal = 0;
+        double somaFitness = 0.0;
+
         for(size_t i=0; i<pop.size(); i++) {
             calcularFitness(pop[i], alvo);
+            somaFitness += pop[i].fitness;
             if(pop[i].fitness > pop[idxMelhorLocal].fitness) idxMelhorLocal = i;
         }
 
         Individuo& melhorLocal = pop[idxMelhorLocal];
+        double mediaFitness = somaFitness/c.nIndv;
 
-        if (abs(melhorLocal.fitness - melhorGeral.fitness) < 0.1 && 
-           (c._mut == "_mut_acu" || c._mut == "_mut_acl")) {
-            estagAtual++;
-            int limiteEstagnacao = 3; 
-            if (estagAtual >= limiteEstagnacao) alterarIncrementoDaMutacaoAtual(false);
-        } 
-        else if (melhorLocal.fitness > melhorGeral.fitness) {
+        if (melhorLocal.fitness > melhorGeral.fitness) {
             melhorGeral = melhorLocal;
-            if (c._mut == "_mut_acu" || c._mut == "_mut_acl") alterarIncrementoDaMutacaoAtual(true);
+            alterarIncrementoDaMutacaoAtual(true);
+        } else if(abs(melhorLocal.fitness - melhorGeral.fitness) < 0.5){
+            estagAtual++;
+            if (estagAtual > c.minEstag) alterarIncrementoDaMutacaoAtual(false);
         }
 
-        if (escolherZeroUm(c.pCat)) {
-            if (c._mut == "_mut_acu" || c._mut == "_mut_acl") alterarIncrementoDaMutacaoAtual(true);
+        // Streaming de dados
+        if (geracoes % c.printGeracoes == 0) {
+            imprimirTrajetoria();
+            imprimirEstatisticas(geracoes, mediaFitness);
+        }
+
+        // Evolução
+        if (estagAtual > c.minEstagCat) {
+            alterarIncrementoDaMutacaoAtual(true);
             pop = realizarCatastrofe(pop);
             for(auto& ind : pop) calcularFitness(ind, alvo);
-            geracoes++;
-            continue; 
         }
 
-        if (c._sel == "_sel_rol") pop = selecaoPorRoleta(pop);
-        
-        if (melhorGeral.fitness > -0.5) {
-            cout << ">>> Solucao otima encontrada antes do limite de geracoes! <<<\n";
-            break;
-        }
-
+        pop = selecaoPorRoleta(pop);
         geracoes++;
-        
-        if (geracoes % 100 == 0) {
-            cout << "Geracao " << setw(5) << geracoes 
-                 << " | Fitness: " << setw(10) << fixed << setprecision(4) << melhorGeral.fitness 
-                 << " | Estagnacao: " << setw(3) << estagAtual 
-                 << " | Fator Mutacao: " << incAtual << "x\n";
-        }
     }
-
-    // RELATÓRIO FINAL
-    cout << "\n========================================\n";
-    cout << "         RESULTADO DA SIMULACAO         \n";
-    cout << "========================================\n";
-    
-    cout << fixed << setprecision(2);
-    Ponto pZero = cinematicaDireta(poseInicial);
-    cout << "[Inicio] -> Pos: (" << pZero.x << ", " << pZero.y << ", " << pZero.z << ")\n";
-
-    for(int w = 0; w < c.nWaypoints; w++) {
-        vector<double> posePasso;
-        
-        posePasso.push_back(melhorGeral.genoma[w][0]);     
-        posePasso.push_back(melhorGeral.genoma[w][1]); 
-        posePasso.push_back(melhorGeral.genoma[w][2]); 
-
-        Ponto p = cinematicaDireta(posePasso);
-        bool bateu = verificarColisao(p); 
-        
-        cout << "[Passo " << w+1 << "] -> "
-             << "Pos: (" << setw(6) << p.x << ", " << setw(6) << p.y << ", " << setw(6) << p.z << ") "
-             << "| Angulos: [" << setw(6) << posePasso[0] << ", " << setw(6) << posePasso[1] << ", " << setw(6) << posePasso[2] << "] "
-             << (bateu ? " <<< COLISAO!" : "") 
-             << "\n";
-    }
-
-    vector<double> ultimaPose;
-    ultimaPose = melhorGeral.genoma[c.nWaypoints-1];
-    Ponto finalReal = cinematicaDireta(ultimaPose);
-    
-    double distFinal = sqrt(pow(finalReal.x - alvo.x, 2) + pow(finalReal.y - alvo.y, 2) + pow(finalReal.z - alvo.z, 2));
-
-    cout << "----------------------------------------\n";
-    cout << "Distancia Final ao Alvo: " << distFinal << "\n";
-    cout << "Fitness Total          : " << melhorGeral.fitness << "\n";
-    cout << "========================================\n";
 
     return 0;
 }

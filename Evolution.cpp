@@ -11,7 +11,8 @@ Individuo gerarIndividuo() {
     for (int i = 0; i < c.nGenes; i++) {
         vector<double> gene;
         for(int j=0; j<c.nJuntas; j++){
-            gene.push_back(escolherNumReal(c.baseLmin[j], c.baseLmax[j]));
+            // Gera velocidades iniciais aleatórias
+            gene.push_back(escolherNumReal(-c.speed, c.speed));
         }
         genoma.push_back(gene);
     }
@@ -22,7 +23,7 @@ Individuo realizarMutacao(Individuo ind) {
     int qtdeMutados = escolherIndiceDeProbabilidades(c.listaPNumGene) + 1;
     
     vector<int> genesParaMutar;
-    vector<int> indicesDisponiveis(c.nGenes); //100
+    vector<int> indicesDisponiveis(c.nGenes); 
     iota(indicesDisponiveis.begin(), indicesDisponiveis.end(), 0);
     shuffle(indicesDisponiveis.begin(), indicesDisponiveis.end(), rng);
     
@@ -51,10 +52,11 @@ Individuo realizarMutacao(Individuo ind) {
         int r = escolherIndiceDeLista(c.nJuntas);
         ind.genoma[idx][r] += mutacao;
 
-        if (ind.genoma[idx][r] < c.baseLmin[r]) 
-            ind.genoma[idx][r] = c.baseLmin[r];
-        if (ind.genoma[idx][r] > c.baseLmax[r])
-            ind.genoma[idx][r] = c.baseLmax[r];
+        if (ind.genoma[idx][r] < -c.speed) 
+            ind.genoma[idx][r] = -c.speed;
+        
+        if (ind.genoma[idx][r] > c.speed)
+            ind.genoma[idx][r] = c.speed;
     }
     return ind;
 }
@@ -64,6 +66,7 @@ Individuo realizarCruzamento(const Individuo& pai1, const Individuo& pai2) {
     for(int i=0;i<c.nGenes;i++){
         vector<double> passoFilho;
         for(int j=0;j<c.nJuntas;j++){
+            // Média simples entre os genes (velocidades) dos pais
             double gene = (pai1.genoma[i][j] + pai2.genoma[i][j]) / 2.0;
             passoFilho.push_back(gene);
         }
@@ -77,20 +80,15 @@ vector<Individuo> realizarCatastrofe(vector<Individuo>& pop) {
     
     vector<pair<double, int>> aux;
     for(size_t i=0; i<pop.size(); i++) aux.push_back({pop[i].fitness, (int)i});
-    sort(aux.begin(), aux.end()); 
+    sort(aux.rbegin(), aux.rend()); 
 
-    if (c._cat == "_cat_dis") { 
-        int mortos = c.nMortosCat;
-        int inicioZonaMorte = (pop.size() - mortos) / 2;
-        
-        for (int i = 0; i < inicioZonaMorte; i++) 
-            popNova.push_back(pop[aux[i].second]);
-        for (int i = inicioZonaMorte + mortos; i < (int)pop.size(); i++)
-            popNova.push_back(pop[aux[i].second]);
-    }
-    // (Outros tipos de catastrofe omitidos para brevidade, mas lógica é a mesma)
-    // Se não for dis, assume dis ou adicione os outros ifs aqui
+    int inicioZonaMorte = c.nMortosCat; 
 
+    // Mantém a elite
+    for (int i = 0; i < inicioZonaMorte; i++) 
+        popNova.push_back(pop[aux[i].second]);
+
+    // Preenche o resto com novos indivíduos aleatórios
     while (popNova.size() < pop.size()) {
         popNova.push_back(gerarIndividuo());
     }
@@ -105,23 +103,25 @@ vector<Individuo> selecaoPorRoleta(vector<Individuo>& pop) {
     }
 
     vector<Individuo> novaPop;
+    // Elitismo: Mantém o melhor absoluto
     novaPop.push_back(pop[idxMelhor]); 
 
+    // Prepara a roleta
     vector<double> roleta;
     double fitnessPior = pop[idxPior].fitness;
-    double normalizacao = (fitnessPior <= 0) ? (-fitnessPior + 1) : 0;
+    
+    // Normalização para garantir probabilidades positivas
+    // Se o fitness for negativo, desloca tudo para cima
+    double normalizacao = (fitnessPior < 0) ? (-fitnessPior + 1.0) : 0.0;
 
     for(const auto& ind : pop) {
-        roleta.push_back(ind.fitness + normalizacao); 
+        roleta.push_back(ind.fitness + normalizacao + 0.1); // +0.1 para evitar zero absoluto
     }
 
-    int genitor1Idx = escolherIndiceDeProbabilidades(roleta);
-    int genitor2Idx = escolherIndiceDeProbabilidades(roleta);
-    
-    novaPop.push_back(pop[genitor1Idx]);
-    novaPop.push_back(pop[genitor2Idx]);
-
     while(novaPop.size() < pop.size()) {
+        int genitor1Idx = escolherIndiceDeProbabilidades(roleta);
+        int genitor2Idx = escolherIndiceDeProbabilidades(roleta);
+        
         Individuo filho = realizarCruzamento(pop[genitor1Idx], pop[genitor2Idx]);
         filho = realizarMutacao(filho);
         novaPop.push_back(filho);
