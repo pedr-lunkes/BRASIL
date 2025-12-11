@@ -71,7 +71,7 @@ double calcularFitness(Individuo& ind, Ponto alvo) {
         trajetoriaPontiforme.push_back(p);
         double dist = sqrt(pow(p.x - alvo.x, 2) + pow(p.y - alvo.y, 2) + pow(p.z - alvo.z, 2));
 
-        if (dist < 0.5) {
+        if (dist < 0.2) {
             ind.venceu = true;
             ind.passoVitoria = (int)i;
             bonusObjetivo = 1000.0 + (c.nWaypoints - i) * 500.0;
@@ -95,7 +95,7 @@ double calcularFitness(Individuo& ind, Ponto alvo) {
     if (ind.venceu) {
         ind.fitness = bonusObjetivo - penalidadeTotal;
     } else {
-        ind.fitness = -penalidadeTotal - distFinal * 1000;
+        ind.fitness = -penalidadeTotal - distFinal * 2000;
     }
     return ind.fitness;
 }

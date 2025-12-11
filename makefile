@@ -12,4 +12,4 @@ clean:
 	rm *.o
 
 run:
-	./main
+	python3 simulation.py
