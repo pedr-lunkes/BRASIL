@@ -28,21 +28,26 @@ Ponto gerarAlvoAleatorio() {
     return alvoGerado;
 }
 
-// Função auxiliar para imprimir a trajetória atual
+// ---- Funções para a comunicação com o script em python ----
+// Função que manda a trajetoria do melhor indivíduo no terminal
 void imprimirTrajetoria() {
-    // Marcador de inicio para o Python identificar
     cout << "START_PATH" << endl;
-
     for(int i = 0; i < melhorGeral.trajetoria.size(); i++) {
         Ponto p = melhorGeral.trajetoria[i];
         cout << p.x << " " << p.y << " " << p.z << endl;
     }
-    
-    // Marcador de fim
     cout << "END_PATH" << endl;
-    
-    // Flush para garantir que o Python receba imediatamente
     cout.flush();
+}
+
+// Função que manda algumas estatísticas do Algoritmo Evolutivo para plot
+void imprimirEstatisticas(int geracao, double mediaFit) {
+    // Formato: STATS <geracao> <melhor_fit> <media_fit> <tamanho_trajetoria>
+    cout << "STATS " 
+         << geracao << " " 
+         << melhorGeral.fitness << " " 
+         << mediaFit << " " 
+         << melhorGeral.trajetoria.size() << endl;
 }
 
 int main(int argc, char* argv[]) {
@@ -72,36 +77,39 @@ int main(int argc, char* argv[]) {
     // Loop Infinito: O programa roda até o Python matar o processo
     while (true) {
         int idxMelhorLocal = 0;
+        double somaFitness = 0.0;
+
         for(size_t i=0; i<pop.size(); i++) {
             calcularFitness(pop[i], alvo);
+            somaFitness += pop[i].fitness;
             if(pop[i].fitness > pop[idxMelhorLocal].fitness) idxMelhorLocal = i;
         }
 
         Individuo& melhorLocal = pop[idxMelhorLocal];
+        double mediaFitness = somaFitness/c.nIndv;
 
         if (melhorLocal.fitness > melhorGeral.fitness) {
             melhorGeral = melhorLocal;
             alterarIncrementoDaMutacaoAtual(true);
         } else if(abs(melhorLocal.fitness - melhorGeral.fitness) < 0.5){
             estagAtual++;
-            if (estagAtual > 1) alterarIncrementoDaMutacaoAtual(false);
+            if (estagAtual > c.minEstag) alterarIncrementoDaMutacaoAtual(false);
         }
 
-        // --- STREAMING DE DADOS ---
-        // A cada 200 gerações (ou na primeira), envia a melhor rota atual
-        if (geracoes % 3 == 0) {
+        // Streaming de dados
+        if (geracoes % c.printGeracoes == 0) {
             imprimirTrajetoria();
+            imprimirEstatisticas(geracoes, mediaFitness);
         }
 
         // Evolução
-        if (estagAtual > 5) {
+        if (estagAtual > c.minEstagCat) {
             alterarIncrementoDaMutacaoAtual(true);
             pop = realizarCatastrofe(pop);
             for(auto& ind : pop) calcularFitness(ind, alvo);
         }
 
         pop = selecaoPorRoleta(pop);
-        
         geracoes++;
     }
 

@@ -5,7 +5,6 @@
 
 using namespace std;
 
-// Definição do obstáculo
 Obstaculo bolaDeDemolicao = {-1, -1, -1, 0}; 
 vector<double> poseInicial = {0.0, 90.0, 0.0};
 
@@ -87,7 +86,7 @@ double calcularFitness(Individuo& ind, Ponto alvo) {
 
         double movimento = 0;
         for(int k=0; k<c.nJuntas; k++) movimento += abs(poseAtual[k] - poseAnt[k]);
-        penalidadeTotal += movimento * 0.5;
+        penalidadeTotal += movimento * 0.1;
     }
 
     ind.trajetoria = trajetoriaPontiforme;
