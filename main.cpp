@@ -15,18 +15,7 @@ using namespace std;
 Individuo melhorGeral;
 
 int main() {
-    vector<double> baseLmin = {-180.0, 0.0, 0.0};
-    vector<double> baseLmax = {180.0, 90.0, 180.0};
-    
-    c.genesLmin.clear();
-    c.genesLmax.clear();
-    
-    // Configura os limites para TODOS os waypoints
-    for(int i=0; i<c.nWaypoints; i++) {
-        c.genesLmin.insert(c.genesLmin.end(), baseLmin.begin(), baseLmin.end());
-        c.genesLmax.insert(c.genesLmax.end(), baseLmax.begin(), baseLmax.end());
-    }
-    
+
     // Atualiza probabilidade de mutação
     c.listaPNumGene.assign(c.nGenes, 1.0/c.nGenes);
     c.listaPCadaGene.assign(c.nGenes, 1.0/c.nGenes);
@@ -108,11 +97,10 @@ int main() {
 
     for(int w = 0; w < c.nWaypoints; w++) {
         vector<double> posePasso;
-        int baseIdx = w * c.nJuntas;
         
-        posePasso.push_back(melhorGeral.genes[baseIdx]);     
-        posePasso.push_back(melhorGeral.genes[baseIdx + 1]); 
-        posePasso.push_back(melhorGeral.genes[baseIdx + 2]); 
+        posePasso.push_back(melhorGeral.genoma[w][0]);     
+        posePasso.push_back(melhorGeral.genoma[w][1]); 
+        posePasso.push_back(melhorGeral.genoma[w][2]); 
 
         Ponto p = cinematicaDireta(posePasso);
         bool bateu = verificarColisao(p); 
@@ -125,7 +113,7 @@ int main() {
     }
 
     vector<double> ultimaPose;
-    for(int i=0; i<3; i++) ultimaPose.push_back(melhorGeral.genes[(c.nWaypoints-1)*3 + i]);
+    ultimaPose = melhorGeral.genoma[c.nWaypoints-1];
     Ponto finalReal = cinematicaDireta(ultimaPose);
     
     double distFinal = sqrt(pow(finalReal.x - alvo.x, 2) + pow(finalReal.y - alvo.y, 2) + pow(finalReal.z - alvo.z, 2));

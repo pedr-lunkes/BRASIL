@@ -7,18 +7,22 @@
 using namespace std;
 
 Individuo gerarIndividuo() {
-    vector<double> genes;
+    vector<vector<double>> genoma;
     for (int i = 0; i < c.nGenes; i++) {
-        genes.push_back(escolherNumReal(c.genesLmin[i], c.genesLmax[i]));
+        vector<double> gene;
+        for(int j=0; j<c.nJuntas; j++){
+            gene.push_back(escolherNumReal(c.baseLmin[j], c.baseLmax[j]));
+        }
+        genoma.push_back(gene);
     }
-    return Individuo(genes);
+    return Individuo(genoma);
 }
 
 Individuo realizarMutacao(Individuo ind) {
     int qtdeMutados = escolherIndiceDeProbabilidades(c.listaPNumGene) + 1;
     
     vector<int> genesParaMutar;
-    vector<int> indicesDisponiveis(c.nGenes);
+    vector<int> indicesDisponiveis(c.nGenes); //100
     iota(indicesDisponiveis.begin(), indicesDisponiveis.end(), 0);
     shuffle(indicesDisponiveis.begin(), indicesDisponiveis.end(), rng);
     
@@ -44,20 +48,28 @@ Individuo realizarMutacao(Individuo ind) {
             mutacao = sinal * escolherNumReal(0, 30.0); 
         }
 
-        ind.genes[idx] += mutacao;
+        int r = escolherIndiceDeLista(c.nJuntas);
+        ind.genoma[idx][r] += mutacao;
 
-        if (ind.genes[idx] < c.genesLmin[idx]) ind.genes[idx] = c.genesLmin[idx];
-        if (ind.genes[idx] > c.genesLmax[idx]) ind.genes[idx] = c.genesLmax[idx];
+        if (ind.genoma[idx][r] < c.baseLmin[r]) 
+            ind.genoma[idx][r] = c.baseLmin[r];
+        if (ind.genoma[idx][r] > c.baseLmax[r])
+            ind.genoma[idx][r] = c.baseLmax[r];
     }
     return ind;
 }
 
 Individuo realizarCruzamento(const Individuo& pai1, const Individuo& pai2) {
-    vector<double> novosGenes(c.nGenes);
-    for (int i = 0; i < c.nGenes; i++) {
-        novosGenes[i] = (pai1.genes[i] + pai2.genes[i]) / 2.0;
+    vector<vector<double>> novoGenoma;
+    for(int i=0;i<c.nGenes;i++){
+        vector<double> passoFilho;
+        for(int j=0;j<c.nJuntas;j++){
+            double gene = (pai1.genoma[i][j] + pai2.genoma[i][j]) / 2.0;
+            passoFilho.push_back(gene);
+        }
+        novoGenoma.push_back(passoFilho);
     }
-    return Individuo(novosGenes);
+    return Individuo(novoGenoma);
 }
 
 vector<Individuo> realizarCatastrofe(vector<Individuo>& pop) {

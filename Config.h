@@ -15,8 +15,8 @@ struct Config {
     int nGenes; // Calculado no construtor
     
     // Limites
-    vector<double> genesLmin;
-    vector<double> genesLmax;
+    vector<double> baseLmin = {-180.0, 0.0, 0.0};
+    vector<double> baseLmax = {180.0, 90.0, 180.0};
     
     // Mutação
     string _mut = "_mut_acu"; 

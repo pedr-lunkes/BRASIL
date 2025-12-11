@@ -46,10 +46,7 @@ double calcularFitness(Individuo& ind, Ponto alvo) {
     trajetoria.push_back(poseInicial);
 
     for (int i = 0; i < c.nWaypoints; i++) {
-        vector<double> pose;
-        for (int j = 0; j < c.nJuntas; j++) {
-            pose.push_back(ind.genes[i * c.nJuntas + j]);
-        }
+        vector<double> pose = ind.genoma[i];
         trajetoria.push_back(pose);
     }
 

@@ -4,11 +4,7 @@
 Config c;
 
 Config::Config() {
-    nGenes = nWaypoints * nJuntas;
-    
-    // Inicializa limites padrões (serão sobrescritos na main, mas é bom ter padrão)
-    genesLmin = {-180.0, 0, 0};
-    genesLmax = {180.0, 90.0, 180.0};
+    nGenes = nWaypoints;
 
     // Inicializa probabilidades uniformes
     if (nGenes > 0) {
