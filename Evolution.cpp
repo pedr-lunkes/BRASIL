@@ -35,19 +35,7 @@ Individuo realizarMutacao(Individuo ind) {
         double sinal = escolherZeroUm(c.pMutPos) ? 1.0 : -1.0;
         double mutacao = 0;
 
-        if (c._mut == "_mut_pad") {
-            mutacao = sinal * c.mutBase;
-        } 
-        else if (c._mut == "_mut_acu") {
-            mutacao = sinal * (c.mutBase + c.incMutBase * incAtual);
-        }
-        else if (c._mut == "_mut_acl") {
-            if (c.incMutBase * incAtual > c.tetoMut) alterarIncrementoDaMutacaoAtual(true);
-            mutacao = sinal * (c.mutBase + c.incMutBase * incAtual);
-        }
-        else if (c._mut == "_mut_cao") {
-            mutacao = sinal * escolherNumReal(0, 30.0); 
-        }
+        mutacao = sinal * (c.mutBase + c.incMutBase * incAtual);
 
         int r = escolherIndiceDeLista(c.nJuntas);
         ind.genoma[idx][r] += mutacao;

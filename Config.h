@@ -23,7 +23,6 @@ struct Config {
     double speed = 5;
     
     // Mutação
-    string _mut = "_mut_acu"; 
     double pMutPos = 0.5;          
     double mutBase = 0.2;          
     double incMutBase = 0.5;       
