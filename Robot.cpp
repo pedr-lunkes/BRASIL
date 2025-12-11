@@ -5,7 +5,7 @@
 
 using namespace std;
 
-Obstaculo bolaDeDemolicao = {-1, -1, -1, 0}; 
+Obstaculo bolaDeDemolicao = {10.0, 5.0, 5.0, 10.0}; 
 vector<double> poseInicial = {0.0, 90.0, 0.0};
 
 Ponto cinematicaDireta(const vector<double>& angulos) {
