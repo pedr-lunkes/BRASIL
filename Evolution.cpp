@@ -11,7 +11,7 @@ Individuo gerarIndividuo() {
     for (int i = 0; i < c.nGenes; i++) {
         vector<double> gene;
         for(int j=0; j<c.nJuntas; j++){
-            gene.push_back(escolherNumReal(c.baseLmin[j], c.baseLmax[j]));
+            gene.push_back(escolherNumReal(-c.speed, c.speed));
         }
         genoma.push_back(gene);
     }

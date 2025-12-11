@@ -20,6 +20,7 @@ struct Individuo {
     double fitness;
     int passoVitoria;
     bool venceu;
+    vector<Ponto> trajetoria;
     
     Individuo() : fitness(-1e9), passoVitoria(0), venceu(false) {}
     Individuo(vector<vector<double>> g) : genoma(g), fitness(-1e9), passoVitoria(0), venceu(false) {}
