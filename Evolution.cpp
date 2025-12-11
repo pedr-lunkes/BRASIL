@@ -77,19 +77,12 @@ vector<Individuo> realizarCatastrofe(vector<Individuo>& pop) {
     
     vector<pair<double, int>> aux;
     for(size_t i=0; i<pop.size(); i++) aux.push_back({pop[i].fitness, (int)i});
-    sort(aux.begin(), aux.end()); 
+    sort(aux.rbegin(), aux.rend()); 
 
-    if (c._cat == "_cat_dis") { 
-        int mortos = c.nMortosCat;
-        int inicioZonaMorte = (pop.size() - mortos) / 2;
-        
-        for (int i = 0; i < inicioZonaMorte; i++) 
-            popNova.push_back(pop[aux[i].second]);
-        for (int i = inicioZonaMorte + mortos; i < (int)pop.size(); i++)
-            popNova.push_back(pop[aux[i].second]);
-    }
-    // (Outros tipos de catastrofe omitidos para brevidade, mas lógica é a mesma)
-    // Se não for dis, assume dis ou adicione os outros ifs aqui
+    int inicioZonaMorte = c.nMortosCat; 
+
+    for (int i = 0; i < inicioZonaMorte; i++) 
+        popNova.push_back(pop[aux[i].second]);
 
     while (popNova.size() < pop.size()) {
         popNova.push_back(gerarIndividuo());

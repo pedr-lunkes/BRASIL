@@ -7,8 +7,8 @@ using namespace std;
 
 struct Config {
     int nIndv = 100;           
-    int nMortosCat = 30;       
-    double pCat = 0.05;        
+    int nMortosCat = 95;       
+    double pCat = 0.01;        
     
     int nWaypoints = 100;      
     int nJuntas = 3;
@@ -22,9 +22,9 @@ struct Config {
     // Mutação
     string _mut = "_mut_acu"; 
     double pMutPos = 0.5;          
-    double mutBase = 1.0;          
+    double mutBase = 0.2;          
     double incMutBase = 0.5;       
-    double tetoMut = 10.0;         
+    double tetoMut = 6.0;         
     
     // Catástrofe e Seleção
     string _cat = "_cat_dis"; 

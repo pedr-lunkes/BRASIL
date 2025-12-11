@@ -59,7 +59,7 @@ double calcularFitness(Individuo& ind, Ponto alvo) {
     trajetoria.push_back(poseInicial);
     trajetoriaPontiforme.push_back(cinematicaDireta(poseInicial));
 
-    double distMinGlobal = 1e9;
+    double distFinal = 0;
     ind.venceu = false;
 
     for (int i = 1; i < c.nWaypoints; i++) {
@@ -71,16 +71,15 @@ double calcularFitness(Individuo& ind, Ponto alvo) {
         trajetoriaPontiforme.push_back(p);
         double dist = sqrt(pow(p.x - alvo.x, 2) + pow(p.y - alvo.y, 2) + pow(p.z - alvo.z, 2));
 
-        if (dist < distMinGlobal) distMinGlobal = dist;
-
-        if (dist < 1.0) {
+        if (dist < 0.5) {
             ind.venceu = true;
             ind.passoVitoria = (int)i;
-            bonusObjetivo = 50000.0 + (c.nWaypoints - i) * 100.0;
+            bonusObjetivo = 1000.0 + (c.nWaypoints - i) * 500.0;
             break;
         }
 
-        penalidadeTotal += dist * 1.0;
+        penalidadeTotal += dist * 1.5;
+        distFinal = dist;
 
         if (verificarColisao(p)) {
             penalidadeTotal += 2000.0; 
@@ -96,7 +95,7 @@ double calcularFitness(Individuo& ind, Ponto alvo) {
     if (ind.venceu) {
         ind.fitness = bonusObjetivo - penalidadeTotal;
     } else {
-        ind.fitness = -penalidadeTotal - (distMinGlobal * 100.0);
+        ind.fitness = -penalidadeTotal - distFinal * 1000;
     }
     return ind.fitness;
 }

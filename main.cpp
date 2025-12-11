@@ -14,12 +14,28 @@ using namespace std;
 // Variável para armazenar o melhor global
 Individuo melhorGeral;
 
-int main() {
+Ponto gerarAlvoAleatorio() {
+    vector<double> angulosValidos;
+    
+    // Gera um ângulo aleatório para cada junta respeitando os limites do Config.h
+    for (int i = 0; i < c.nJuntas; i++) {
+        double angulo = escolherNumReal(c.baseLmin[i], c.baseLmax[i]);
+        angulosValidos.push_back(angulo);
+    }
 
+    Ponto alvoGerado = cinematicaDireta(angulosValidos);
+
+    return alvoGerado;
+}
+
+int main() {
     // Atualiza probabilidade de mutação
     c.listaPNumGene.assign(c.nGenes, 1.0/c.nGenes);
     c.listaPCadaGene.assign(c.nGenes, 1.0/c.nGenes);
     
+    // Ponto alvo = gerarAlvoAleatorio();
+    // cout << "Alvo Gerado -> Pos: (" << alvo.x << ", " << alvo.y << ", " << alvo.z << ")" << endl;
+
     Ponto alvo = {20.0, 0.0, 0.0};
     
     vector<Individuo> pop;
@@ -50,39 +66,34 @@ int main() {
 
         Individuo& melhorLocal = pop[idxMelhorLocal];
 
-        if (abs(melhorLocal.fitness - melhorGeral.fitness) < 0.1 && 
+        if (abs(melhorLocal.fitness - melhorGeral.fitness) < 0.5 && 
            (c._mut == "_mut_acu" || c._mut == "_mut_acl")) {
             estagAtual++;
-            int limiteEstagnacao = 3; 
-            if (estagAtual >= limiteEstagnacao) alterarIncrementoDaMutacaoAtual(false);
+            if (estagAtual > 1) alterarIncrementoDaMutacaoAtual(false);
         } 
         else if (melhorLocal.fitness > melhorGeral.fitness) {
             melhorGeral = melhorLocal;
             if (c._mut == "_mut_acu" || c._mut == "_mut_acl") alterarIncrementoDaMutacaoAtual(true);
         }
 
-        if (escolherZeroUm(c.pCat)) {
+        if (estagAtual > 5) {
             if (c._mut == "_mut_acu" || c._mut == "_mut_acl") alterarIncrementoDaMutacaoAtual(true);
             pop = realizarCatastrofe(pop);
             for(auto& ind : pop) calcularFitness(ind, alvo);
-            geracoes++;
-            continue; 
         }
 
         if (c._sel == "_sel_rol") pop = selecaoPorRoleta(pop);
         
-        if (melhorGeral.fitness > -0.5) {
-            cout << melhorGeral.fitness;
-            cout << ">>> Solucao otima encontrada antes do limite de geracoes! <<<\n";
-            break;
-        }
+        // if (melhorGeral.fitness > -0.5) {
+        //     cout << melhorGeral.fitness;
+        //     cout << ">>> Solucao otima encontrada antes do limite de geracoes! <<<\n";
+        //     break;
+        // }
 
         geracoes++;
         
         if (geracoes % 20 == 0) {
-            vector<double> ultimaPose;
-            ultimaPose = melhorGeral.genoma[c.nWaypoints-1];
-            Ponto p = cinematicaDireta(ultimaPose);
+            Ponto p = melhorGeral.trajetoria[melhorGeral.trajetoria.size() - 1];
             double dist = sqrt(pow(p.x - alvo.x, 2) + pow(p.y - alvo.y, 2) + pow(p.z - alvo.z, 2));
 
             cout << "Geracao " << setw(5) << geracoes 
