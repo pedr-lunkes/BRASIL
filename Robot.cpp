@@ -1,3 +1,5 @@
+#define _USE_MATH_DEFINES
+
 #include "Robot.h"
 #include "Config.h"
 #include <cmath>
