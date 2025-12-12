@@ -1,6 +1,7 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
+#include "Types.h"
 #include <vector>
 #include <string>
 using namespace std;
@@ -16,6 +17,9 @@ struct Config {
 
     // Quantidades de gerações que serão mandados para o print (simulador)
     int printGeracoes = 3;
+
+    Obstaculo bolaDeDemolicao = {10.0, 5.0, 5.0, 5.0}; 
+    vector<double> poseInicial = {0.0, 90.0, 0.0};
     
     // Limites
     vector<double> baseLmin = {-180.0, 0.0, 0.0};

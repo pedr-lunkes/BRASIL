@@ -7,9 +7,7 @@
 
 using namespace std;
 
-Obstaculo bolaDeDemolicao = {10.0, 5.0, 5.0, 10.0}; 
-vector<double> poseInicial = {0.0, 90.0, 0.0};
-
+/// @brief Calcula o quadrado da distância entre dois pontos.
 double distSq(Ponto p1, Ponto p2) {
     return pow(p1.x - p2.x, 2) + pow(p1.y - p2.y, 2) + pow(p1.z - p2.z, 2);
 }
@@ -113,8 +111,8 @@ bool verificarColisao(const vector<double>& angulos) {
     Ponto p2 = cinematicaDireta(angulos);
 
     // Verifica colisão dos dois segmentos do braço com a esfera
-    if (segmentoColideEsfera(p0, p1, bolaDeDemolicao)) return true;
-    if (segmentoColideEsfera(p1, p2, bolaDeDemolicao)) return true;
+    if (segmentoColideEsfera(p0, p1, c.bolaDeDemolicao)) return true;
+    if (segmentoColideEsfera(p1, p2, c.bolaDeDemolicao)) return true;
     return false;
 }
 
@@ -147,8 +145,8 @@ double calcularFitness(Individuo& ind, Ponto alvo) {
     
     vector<vector<double>> trajetoria;
     vector<Ponto> trajetoriaPontiforme;
-    trajetoria.push_back(poseInicial);
-    trajetoriaPontiforme.push_back(cinematicaDireta(poseInicial));
+    trajetoria.push_back(c.poseInicial);
+    trajetoriaPontiforme.push_back(cinematicaDireta(c.poseInicial));
 
     double distFinal = 0;
     ind.venceu = false;

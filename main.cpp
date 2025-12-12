@@ -59,10 +59,10 @@ void imprimirEstatisticas(int geracao, double mediaFit) {
 /// @brief Imprime as informações do obstáculo no formato esperado pelo script Python.
 void imprimirObstaculo() {
     cout << "OBSTACLE "
-         << bolaDeDemolicao.x << " "
-         << bolaDeDemolicao.y << " "
-         << bolaDeDemolicao.z << " "
-         << bolaDeDemolicao.raio << endl;
+         << c.bolaDeDemolicao.x << " "
+         << c.bolaDeDemolicao.y << " "
+         << c.bolaDeDemolicao.z << " "
+         << c.bolaDeDemolicao.raio << endl;
 }
 
 int main(int argc, char* argv[]) {
