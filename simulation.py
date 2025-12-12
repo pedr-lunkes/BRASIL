@@ -14,6 +14,9 @@ import multiprocessing
 LINK_1 = 10.0
 LINK_2 = 10.0
 
+# --- Obstáculo ---
+current_obstacle = None
+
 # --- Variáveis Globais de Estado da UI ---
 current_steps_count = 0
 
@@ -75,7 +78,7 @@ class SolverThread(threading.Thread):
         self.running = True
 
     def run(self):
-        global current_steps_count
+        global current_steps_count, current_obstacle
         while self.running:
             try: target = command_queue.get(timeout=0.5) 
             except queue.Empty: continue
@@ -96,8 +99,18 @@ class SolverThread(threading.Thread):
                     line = self.process.stdout.readline()
                     if not line: break
                     line = line.strip()
+
+                    if line.startswith("OBSTACLE"):
+                        parts = line.split()
+                        if len(parts) == 5:
+                            current_obstacle = (
+                                float(parts[1]),
+                                float(parts[2]),
+                                float(parts[3]),
+                                float(parts[4])
+                            )
                     
-                    if line == "START_PATH": current_path = []; reading_path = True
+                    elif line == "START_PATH": current_path = []; reading_path = True
                     elif line == "END_PATH":
                         reading_path = False
                         if current_path: trajectory_queue.put(current_path)
@@ -216,6 +229,31 @@ def draw_robot(angles, ghost_mode=False):
     glPopMatrix()
     glDisable(GL_CULL_FACE)
 
+
+def draw_obstacle():
+    global current_obstacle
+
+    if current_obstacle is None:
+        return
+
+    x, y, z, radius = current_obstacle
+
+    if radius <= 0:
+        return
+
+    glPushMatrix()
+    glTranslatef(x, y, z)
+
+    glEnable(GL_BLEND)
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+    glColor4f(0.75, 0.75, 0.75, 1.0)
+
+    quadric = gluNewQuadric()
+    gluSphere(quadric, radius, 32, 32)
+
+    glColor4f(1.0, 1.0, 1.0, 1.0)
+    glPopMatrix()
+
 def draw_grid():
     glLineWidth(1.0); glColor3f(0.25, 0.25, 0.25); glBegin(GL_LINES)
     for i in range(-30, 31, 5): glVertex3f(-30, i, 0); glVertex3f(30, i, 0); glVertex3f(i, -30, 0); glVertex3f(i, 30, 0)
@@ -290,6 +328,8 @@ def main():
 
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
             camera.apply(); draw_grid()
+
+            draw_obstacle()
             
             glPushMatrix(); glColor4f(1, 1, 1, 0.5); glTranslatef(*target_pos); gluSphere(gluNewQuadric(), 1.0, 16, 16); glPopMatrix()
 

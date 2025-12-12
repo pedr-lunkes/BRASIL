@@ -1,7 +1,6 @@
 #include <iostream>
 #include <vector>
 #include <cmath>
-#include <iomanip>
 
 #include "Types.h"
 #include "Config.h"
@@ -50,6 +49,15 @@ void imprimirEstatisticas(int geracao, double mediaFit) {
          << melhorGeral.trajetoria.size() << endl;
 }
 
+// Função que manda informações sobre o obstáculo para plot
+void imprimirObstaculo() {
+    cout << "OBSTACLE "
+         << bolaDeDemolicao.x << " "
+         << bolaDeDemolicao.y << " "
+         << bolaDeDemolicao.z << " "
+         << bolaDeDemolicao.raio << endl;
+}
+
 int main(int argc, char* argv[]) {
     // Leitura dos argumentos
     double tx = 20.0, ty = 0.0, tz = 0.0;
@@ -71,6 +79,8 @@ int main(int argc, char* argv[]) {
 
     for(auto& ind : pop) calcularFitness(ind, alvo);
     melhorGeral = pop[0];
+
+    imprimirObstaculo();
 
     int geracoes = 0;
     
