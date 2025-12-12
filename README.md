@@ -60,11 +60,23 @@ Por simular um braço robótico real, a simulação possui a seguinte morfologia
 O robô é inicializado na posição vertical de repouso: `[Base: 0°, Ombro: 90°, Cotovelo: 0°]`.
 
 **2. Ciclo de Execução:**
-O algoritmo define um alvo aleatório no espaço de trabalho válido. O braço então performa a melhor trajetória encontrada pela evolução, demonstrando visualmente a convergência, o número total de passos de tempo necessários para o alcance e o fitness médio obtido.
+O algoritmo define um alvo aleatório no espaço de trabalho válido. O braço então performa a melhor trajetória encontrada pela evolução, demonstrando visualmente a convergência, o número total de passos de tempo necessários para o alcance e o fitness médio obtido. 
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/0085217a-3724-4f14-8d2c-50074715e47c" width="480" alt="Captura de tela 2025-12-12 112600" />&nbsp;&nbsp;&nbsp;&nbsp;
-  <img src="https://github.com/user-attachments/assets/85a12896-be5e-4e2f-bf10-442827fa788c" width="380" alt="Captura de tela 2025-12-12 112541" />
+  <strong>Métricas de Convergência e Fitness</strong><br>
+  <img src="https://github.com/user-attachments/assets/85a12896-be5e-4e2f-bf10-442827fa788c" width="400" alt="Exemplo sem obstáculo" />
 </p>
+
+<p align="center">
+  <strong>Exemplo 1: Sem Obstáculo)</strong><br>
+  <img src="https://github.com/user-attachments/assets/0085217a-3724-4f14-8d2c-50074715e47c" width="400" alt="Exemplo com obstáculo" />
+</p>
+
+<p align="center">
+  <strong>Exemplo 2: Com Obstáculo</strong><br>
+  <img src="https://github.com/user-attachments/assets/c2ebfb9b-5749-4927-ac4a-94b5ebf83e11" width="400" alt="Gráfico de Fitness" />
+</p>
+
+> **Nota:** As dimensões do obstáculo podem ser definidas no arquivo de configurações Config.h.
 
 ---
 
@@ -139,4 +151,6 @@ O arquivo funcaoBraco.py pode ser executado separadamente para analisar a matem�
 ```bash
 python funcaoBraco.py
 ```
+<p align="center">
 <img src="https://github.com/user-attachments/assets/35b331d6-3f10-499b-9423-44f6b3f4ecfa" width="360" alt="Visualização do Espaço de Trabalho">
+</p>
