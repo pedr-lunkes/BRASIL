@@ -9,7 +9,7 @@ extern Obstaculo bolaDeDemolicao;
 extern std::vector<double> poseInicial;
 
 Ponto cinematicaDireta(const std::vector<double>& angulos);
-bool verificarColisao(Ponto p);
+bool verificarColisao(const std::vector<double>& angulos);
 double calcularFitness(Individuo& ind, Ponto alvo);
 vector<double> move(vector<double> p1, vector<double> v);
 

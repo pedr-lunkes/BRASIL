@@ -8,6 +8,41 @@ using namespace std;
 Obstaculo bolaDeDemolicao = {10.0, 5.0, 5.0, 10.0}; 
 vector<double> poseInicial = {0.0, 90.0, 0.0};
 
+double distSq(Ponto p1, Ponto p2) {
+    return pow(p1.x - p2.x, 2) + pow(p1.y - p2.y, 2) + pow(p1.z - p2.z, 2);
+}
+
+bool segmentoColideEsfera(Ponto p1, Ponto p2, Obstaculo obs) {
+    double ab_x = p2.x - p1.x;
+    double ab_y = p2.y - p1.y;
+    double ab_z = p2.z - p1.z; // vetor ab
+
+    double ac_x = obs.x - p1.x;
+    double ac_y = obs.y - p1.y;
+    double ac_z = obs.z - p1.z; // vetor ac
+                                
+    double dot = ab_x * ac_x + ab_y * ac_y + ab_z * ac_z; // Produto Vetorial
+    
+    double len_sq = ab_x*ab_x + ab_y*ab_y + ab_z*ab_z; // ||ab||² 
+
+    double t = -1.0;
+    if (len_sq != 0)
+        t = dot / len_sq;
+    
+    t = std::max(0.0, std::min(1.0, t));
+
+    // Projeção
+    Ponto closest;
+    closest.x = p1.x + ab_x * t;
+    closest.y = p1.y + ab_y * t;
+    closest.z = p1.z + ab_z * t;
+
+    Ponto centroEsfera = {obs.x, obs.y, obs.z};
+    double dist = distSq(closest, centroEsfera);
+
+    return dist < (obs.raio * obs.raio);
+}
+
 Ponto cinematicaDireta(const vector<double>& angulos) {
     double L_umero = 10.0;
     double L_antebraco = 10.0;
@@ -15,9 +50,6 @@ Ponto cinematicaDireta(const vector<double>& angulos) {
     double angulo_base     = angulos[0] * (M_PI / 180.0);
     double angulo_ombro    = angulos[1] * (M_PI / 180.0);
     double angulo_cotovelo = angulos[2] * (M_PI / 180.0);
-
-    double r_cotovelo = L_umero * cos(angulo_ombro);
-    double z_cotovelo = L_umero * sin(angulo_ombro);
     
     double angulo_abs = angulo_ombro - angulo_cotovelo;
 
@@ -31,11 +63,28 @@ Ponto cinematicaDireta(const vector<double>& angulos) {
     return {x, y, z};
 }
 
-bool verificarColisao(Ponto p) {
-    double dist = sqrt(pow(p.x - bolaDeDemolicao.x, 2) + 
-                       pow(p.y - bolaDeDemolicao.y, 2) + 
-                       pow(p.z - bolaDeDemolicao.z, 2));
-    return dist < bolaDeDemolicao.raio;
+bool verificarColisao(const vector<double>& angulos) {
+    double L_umero = 10.0;
+
+    double angulo_base = angulos[0] * (M_PI / 180.0);
+    double angulo_ombro = angulos[1] * (M_PI / 180.0);
+
+    Ponto p0 = {0.0, 0.0, 0.0};
+
+    double r_cotovelo = L_umero * cos(angulo_ombro);
+    double z_cotovelo = L_umero * sin(angulo_ombro);
+
+    Ponto p1;
+    p1.x = r_cotovelo * cos(angulo_base);
+    p1.y = r_cotovelo * sin(angulo_base);
+    p1.z = z_cotovelo;
+
+    Ponto p2 = cinematicaDireta(angulos);
+
+    if (segmentoColideEsfera(p0, p1, bolaDeDemolicao)) return true;
+    if (segmentoColideEsfera(p1, p2, bolaDeDemolicao)) return true;
+    return false;
+
 }
 
 vector<double> move(vector<double> p1, vector<double> v) {
@@ -80,7 +129,7 @@ double calcularFitness(Individuo& ind, Ponto alvo) {
         penalidadeTotal += dist * 1.5;
         distFinal = dist;
 
-        if (verificarColisao(p)) {
+        if (verificarColisao(poseAtual)) {
             penalidadeTotal += 2000.0; 
         }
 
