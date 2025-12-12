@@ -154,3 +154,9 @@ python funcaoBraco.py
 <p align="center">
 <img src="https://github.com/user-attachments/assets/35b331d6-3f10-499b-9423-44f6b3f4ecfa" width="360" alt="Visualização do Espaço de Trabalho">
 </p>
+
+---
+## Autores
+Fernando Valentim Torres - 15452340  
+Luysa de Souza Gonçalves - 15474077  
+Pedro Lunkes Vilella - 15484287
