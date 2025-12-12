@@ -246,7 +246,7 @@ def draw_obstacle():
 
     glEnable(GL_BLEND)
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
-    glColor4f(0.75, 0.75, 0.75, 1.0)
+    glColor4f(0.0, 0.0, 0.0, 1.0)
 
     quadric = gluNewQuadric()
     gluSphere(quadric, radius, 32, 32)
